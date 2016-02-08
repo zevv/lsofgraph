@@ -170,22 +170,41 @@ each_proc(function(proc)
 	local proc_parent = proc_find(procs, "p", proc.R)
 	if proc_parent then
 		printf('	p%d [ label = "%s\\n%d" ];\n', proc.p, proc.c, proc.p)
-		printf('	p%d -- p%d [ label = "child" penwidth=2 weight=100 ];\n', proc.R, proc.p)
+		printf('	p%d -- p%d [ penwidth=2 weight=100 color=grey60];\n', proc.R, proc.p)
 	end
 end)
 
--- FIFO's
+-- FIFOs
 
 for _, type in ipairs( { "FIFO", "unix" } ) do
 	local seen = {}
 	each_file_filter("t", type, function(proc1, file1)
 		each_file_filter("t", type, function(proc2, file2)
 			if proc1 ~= proc2 and file1.i == file2.i then
-				local name = type .. ":" .. file1.i
+				local name = type .. " " .. file1.i
 				if not seen[name] then
-					printf('	p%d -- p%d [ label = "%s:%d" color="grey60" ];\n', 
+					printf('	p%d -- p%d [ label = "%s:%d" color="purple" ];\n', 
 						proc1.p, proc2.p, type, file1.i)
 					seen[name] = true
+				end
+			end
+		end)
+	end)
+end
+
+
+-- sockets
+
+for _, type in ipairs( { "IPv4", "IPv6" } ) do
+	each_file_filter("t", type, function(proc1, file1)
+		each_file_filter("t", type, function(proc2, file2)
+			local n1, n2 = file1.n, file2.n
+			local from, to = n1:match("(.-)%->(.+)")
+			if from and to then
+				n1 = to .. "->" .. from
+				if proc1 ~= proc2 and n1 == n2 then
+					printf('	p%d -- p%d [ label = "%s" color="green" ];\n', 
+						proc1.p, proc2.p, file1.P .. " " .. file1.n)
 				end
 			end
 		end)
