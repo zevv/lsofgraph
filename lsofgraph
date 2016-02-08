@@ -1,0 +1,176 @@
+#!/usr/bin/lua
+
+--[[
+  a    file access mode
+  c    process command name (all characters from proc or user structure)
+  C    file structure share count
+  d    file's device character code
+  D    file's major/minor device number (0x<hexadecimal>)
+  f    file descriptor (always selected)
+  F    file structure address (0x<hexadecimal>)
+  G    file flaGs (0x<hexadecimal>; names if +fg follows)
+  g    process group ID
+  i    file's inode number
+  K    tasK ID
+  k    link count
+  l    file's lock status
+  L    process login name
+  m    marker between repeated output
+  n    file name, comment, Internet address
+  N    node identifier (ox<hexadecimal>
+  o    file's offset (decimal)
+  p    process ID (always selected)
+  P    protocol name
+  r    raw device number (0x<hexadecimal>)
+  R    parent process ID
+  s    file's size (decimal)
+  S    file's stream identification
+  t    file's type
+  T    TCP/TPI information, identified by prefixes (the
+       `=' is part of the prefix):
+           QR=<read queue size>
+           QS=<send queue size>
+           SO=<socket options and values> (not all dialects)
+           SS=<socket states> (not all dialects)
+           ST=<connection state>
+           TF=<TCP flags and values> (not all dialects)
+           WR=<window read size>  (not all dialects)
+           WW=<window write size>  (not all dialects)
+       (TCP/TPI information isn't reported for all supported
+         UNIX dialects. The -h or -? help output for the
+         -T option will show what TCP/TPI reporting can be
+         requested.)
+  u    process user ID
+  z    Solaris 10 and higher zone name
+  Z    SELinux security context (inhibited when SELinux is disabled)
+  0    use NUL field terminator character in place of NL
+  1-9  dialect-specific field identifiers (The output of -F? identifies the information to be found in dialect-specific fields.)
+]]
+
+
+local function printf(fmt, ...)
+	io.write(string.format(fmt, ...))
+end
+
+--
+-- Parse lsof output into lua tables
+--
+
+local function parse_lsof(s)
+
+	local procs = {}
+
+	local cur
+
+	for l in s:gmatch("[^\r\n]+") do
+
+		local tag, val = l:match("(.)(.+)")
+
+		local valn = tonumber(val)
+		val = valn or val
+
+		if tag == 'p' then
+			proc = {
+				files = {},
+				p = val
+			}
+			cur = proc
+			table.insert(procs, proc)
+		elseif tag == 'f' then
+			file = {
+				f = val
+			}
+			table.insert(proc.files, file)
+			cur = file
+		else
+			cur[tag] = val
+		end
+
+	end
+
+	return procs
+end
+
+
+local function print_file(f)
+	for k, v in pairs(f) do
+		print(k .. " " .. v)
+	end
+end
+
+
+local function proc_find(procs, key, val)
+	for _, proc in ipairs(procs) do
+		if proc[key] == val then
+			return proc
+		end
+	end
+end
+
+
+
+local procs = parse_lsof(io.read("*a"))
+
+-- hide threads
+
+local function each_proc(fn)
+	for _, proc in ipairs(procs) do
+		if not proc.K then
+			fn(proc)
+		end
+	end
+end
+
+local function each_file(fn)
+	each_proc(function(proc)
+		for _, file in ipairs(proc.files) do
+			fn(proc, file)
+		end
+	end)
+end
+
+local function each_file_filter(key, val, fn)
+	each_file(function(proc, file)
+		if file[key] == val then
+			fn(proc, file)
+		end
+	end)
+end
+
+
+-- Generate graph
+
+printf("digraph G {\n")
+printf("	rankdir = LR;\n")
+printf("	node [ width=0, height=0, fontname=Helvetica, fontsize=10];\n")
+printf("	edge [ fontname=Helvetica, fontsize=10];\n")
+
+-- Parent/child relationships
+
+each_proc(function(proc)
+	local proc_parent = proc_find(procs, "p", proc.R)
+	if proc_parent and proc_parent.c ~= "kthreadd" then
+		printf('	p%d [ label = "%s\\n%d" ];\n', proc.p, proc.c, proc.p)
+		printf('	p%d -> p%d [ label = "child" penwidth=2 weight=100 ];\n', proc.R, proc.p)
+	end
+end)
+
+-- FIFO's
+
+for _, type in ipairs( { "FIFO", "unix" } ) do
+	each_file_filter("t", type, function(proc1, file1)
+		each_file_filter("t", type, function(proc2, file2)
+			if proc1 ~= proc2 and file1.i == file2.i then
+				printf('	p%d -> p%d [ label = "%s:%d %d->%d" color="grey60" ];\n', 
+					proc1.p, proc2.p, type, file1.i, file1.f, file2.f)
+			end
+		end)
+	end)
+end
+
+-- Done
+
+print("}")
+
+-- vi: ft=lua ts=3 sw=3
+
