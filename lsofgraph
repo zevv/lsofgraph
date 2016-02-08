@@ -196,15 +196,23 @@ end
 -- sockets
 
 for _, type in ipairs( { "IPv4", "IPv6" } ) do
+	local seen = {}
 	each_file_filter("t", type, function(proc1, file1)
 		each_file_filter("t", type, function(proc2, file2)
-			local n1, n2 = file1.n, file2.n
-			local from, to = n1:match("(.-)%->(.+)")
-			if from and to then
-				n1 = to .. "->" .. from
-				if proc1 ~= proc2 and n1 == n2 then
-					printf('	p%d -- p%d [ label = "%s" color="green" ];\n', 
-						proc1.p, proc2.p, file1.P .. " " .. file1.n)
+			if proc1 ~= proc2 then
+				local n1, n2 = file1.n, file2.n
+				local from, to = n2:match("(.-)%->(.+)")
+				if from and to then
+					n2_rev = to .. "->" .. from
+					if n1 == n2_rev then
+						io.stderr:write(n1 .. "\n")
+						if not seen[n1] and not seen[n2] then
+							printf('	p%d -- p%d [ label = "%s" color="green" ];\n', 
+								proc1.p, proc2.p, file1.P .. " " .. file1.n)
+							seen[n1] = true
+							seen[n2] = true
+						end
+					end
 				end
 			end
 		end)
