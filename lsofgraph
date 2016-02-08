@@ -161,7 +161,7 @@ end
 
 printf("graph G {\n")
 printf("	rankdir = LR;\n")
-printf("	node [ width=0, height=0, fontname=Helvetica, fontsize=10];\n")
+printf("	node [ shape=box, style=rounded width=0, height=0, fontname=Helvetica, fontsize=10];\n")
 printf("	edge [ fontname=Helvetica, fontsize=10];\n")
 
 -- Parent/child relationships
