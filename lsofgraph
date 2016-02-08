@@ -56,34 +56,56 @@ end
 -- Parse lsof output into lua tables
 --
 
-local function parse_lsof(s)
+local function parse_lsof()
 
 	local procs = {}
 
-	local cur
+	local cur, proc, file
 
-	for l in s:gmatch("[^\r\n]+") do
+	for l in io.lines() do
 
-		local tag, val = l:match("(.)(.+)")
+		local tag, val = l:sub(1, 1), l:sub(2)
 
 		local valn = tonumber(val)
 		val = valn or val
 
 		if tag == 'p' then
-			proc = {
-				files = {},
-				p = val
-			}
-			cur = proc
+			proc = { files = {} }
+			file = nil
 			table.insert(procs, proc)
-		elseif tag == 'f' then
-			file = {
-				f = val
-			}
+			cur = proc
+		elseif tag == 'f' and proc then
+			file = { }
 			table.insert(proc.files, file)
 			cur = file
-		else
+		end
+	
+		if cur then
 			cur[tag] = val
+		end
+
+		if proc then
+
+			local skip = false
+
+			-- skip threads
+
+			if proc.K then
+				skip = true
+			end
+
+			-- skip kernel processes
+
+			if file and file.f == "txt" and file.t == "unknown" then
+				skip = true
+			end
+
+			if skip then
+				proc = nil
+				file = nil
+				cur = nil
+				table.remove(procs)
+			end
 		end
 
 	end
@@ -109,15 +131,12 @@ end
 
 
 
-local procs = parse_lsof(io.read("*a"))
+local procs = parse_lsof()
 
--- hide threads
 
 local function each_proc(fn)
 	for _, proc in ipairs(procs) do
-		if not proc.K then
-			fn(proc)
-		end
+		fn(proc)
 	end
 end
 
@@ -140,7 +159,7 @@ end
 
 -- Generate graph
 
-printf("digraph G {\n")
+printf("graph G {\n")
 printf("	rankdir = LR;\n")
 printf("	node [ width=0, height=0, fontname=Helvetica, fontsize=10];\n")
 printf("	edge [ fontname=Helvetica, fontsize=10];\n")
@@ -149,20 +168,25 @@ printf("	edge [ fontname=Helvetica, fontsize=10];\n")
 
 each_proc(function(proc)
 	local proc_parent = proc_find(procs, "p", proc.R)
-	if proc_parent and proc_parent.c ~= "kthreadd" then
+	if proc_parent then
 		printf('	p%d [ label = "%s\\n%d" ];\n', proc.p, proc.c, proc.p)
-		printf('	p%d -> p%d [ label = "child" penwidth=2 weight=100 ];\n', proc.R, proc.p)
+		printf('	p%d -- p%d [ label = "child" penwidth=2 weight=100 ];\n', proc.R, proc.p)
 	end
 end)
 
 -- FIFO's
 
 for _, type in ipairs( { "FIFO", "unix" } ) do
+	local seen = {}
 	each_file_filter("t", type, function(proc1, file1)
 		each_file_filter("t", type, function(proc2, file2)
 			if proc1 ~= proc2 and file1.i == file2.i then
-				printf('	p%d -> p%d [ label = "%s:%d %d->%d" color="grey60" ];\n', 
-					proc1.p, proc2.p, type, file1.i, file1.f, file2.f)
+				local name = type .. ":" .. file1.i
+				if not seen[name] then
+					printf('	p%d -- p%d [ label = "%s:%d" color="grey60" ];\n', 
+						proc1.p, proc2.p, type, file1.i)
+					seen[name] = true
+				end
 			end
 		end)
 	end)
