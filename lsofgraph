@@ -169,7 +169,7 @@ printf("	edge [ fontname=Helvetica, fontsize=10];\n")
 each_proc(function(proc)
 	local proc_parent = proc_find(procs, "p", proc.R)
 	if proc_parent then
-		printf('	p%d [ label = "%s\\n%d" ];\n', proc.p, proc.c, proc.p)
+		printf('	p%d [ label = "%s\\n%d %s" ];\n', proc.p, proc.c, proc.p, proc.L)
 		printf('	p%d -- p%d [ penwidth=2 weight=100 color=grey60];\n', proc.R, proc.p)
 	end
 end)
