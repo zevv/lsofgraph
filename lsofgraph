@@ -178,6 +178,13 @@ end
 
 -- Connections
 
+local colors = {
+	fifo = "green",
+	unix = "purple",
+	tcp  = "red",
+	udp  = "orange",
+}
+
 for type, conn in pairs(conns) do
 	for id, files in pairs(conn) do
 
@@ -190,7 +197,7 @@ for type, conn in pairs(conns) do
 			
 			if p1 ~= p2 then
 				local label = type .. ":" .. id
-				printf('	p%d -- p%d [ color="green" label="%s"];\n', p1.p, p2.p, label)
+				printf('	p%d -- p%d [ color="%s" label="%s"];\n', p1.p, p2.p, colors[type] or "black", label)
 			end
 
 		end
