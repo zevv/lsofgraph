@@ -1,6 +1,6 @@
 #!/usr/bin/lua
 
-require "format"
+--require "format"
 
 --[[
   a    file access mode
