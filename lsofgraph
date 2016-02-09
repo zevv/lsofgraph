@@ -1,5 +1,7 @@
 #!/usr/bin/lua
 
+require "format"
+
 --[[
   a    file access mode
   c    process command name (all characters from proc or user structure)
@@ -70,41 +72,33 @@ local function parse_lsof()
 		val = valn or val
 
 		if tag == 'p' then
-			proc = { files = {} }
-			file = nil
-			table.insert(procs, proc)
-			cur = proc
+			if not procs[val] then
+				proc = { files = {} }
+				file = nil
+				cur = proc
+				procs[val] = proc
+			else
+				proc = nil
+				cur = nil
+			end
 		elseif tag == 'f' and proc then
-			file = { }
-			table.insert(proc.files, file)
+			file = { proc = proc }
 			cur = file
+			table.insert(proc.files, file)
 		end
 	
 		if cur then
 			cur[tag] = val
 		end
+			
+		-- skip kernel threads
 
 		if proc then
-
-			local skip = false
-
-			-- skip threads
-
-			if proc.K then
-				skip = true
-			end
-
-			-- skip kernel processes
-
 			if file and file.f == "txt" and file.t == "unknown" then
-				skip = true
-			end
-
-			if skip then
+				procs[proc.p] = nil
 				proc = nil
 				file = nil
 				cur = nil
-				table.remove(procs)
 			end
 		end
 
@@ -114,47 +108,50 @@ local function parse_lsof()
 end
 
 
-local function print_file(f)
-	for k, v in pairs(f) do
-		print(k .. " " .. v)
-	end
-end
+local function find_conns(procs)
 
+	local cs = {
+		fifo = {}, -- index by inode
+		unix = {}, -- index by inode
+		tcp  = {}, -- index by sorted endpoints
+		udp  = {}, -- index by sorted endpoints
+	}
 
-local function proc_find(procs, key, val)
-	for _, proc in ipairs(procs) do
-		if proc[key] == val then
-			return proc
+	for pid, proc in pairs(procs) do
+		for _, file in ipairs(proc.files) do
+
+			if file.t == "unix" then
+				local us = cs.unix
+				us[file.i] = us[file.i] or {}
+				table.insert(us[file.i], file)
+			end
+
+			if file.t == "FIFO" then
+				local fs = cs.fifo
+				fs[file.i] = fs[file.i] or {}
+				table.insert(fs[file.i], file)
+			end
+
+			if file.t == "IPv4" or file.t == "IPv6" then
+				local a, b = file.n:match("(.-)%->(.+)")
+				local ps = { a, b }
+				table.sort(ps)
+				local id = table.concat(ps, "->")
+				local fs = (file.P == "TCP") and cs.tcp or cs.udp
+				fs[id] = fs[id] or {}
+				table.insert(fs[id], file)
+			end
 		end
 	end
+
+	return cs
+
 end
 
 
 
 local procs = parse_lsof()
-
-
-local function each_proc(fn)
-	for _, proc in ipairs(procs) do
-		fn(proc)
-	end
-end
-
-local function each_file(fn)
-	each_proc(function(proc)
-		for _, file in ipairs(proc.files) do
-			fn(proc, file)
-		end
-	end)
-end
-
-local function each_file_filter(key, val, fn)
-	each_file(function(proc, file)
-		if file[key] == val then
-			fn(proc, file)
-		end
-	end)
-end
+local conns = find_conns(procs)
 
 
 -- Generate graph
@@ -166,65 +163,43 @@ printf("	edge [ fontname=Helvetica, fontsize=10];\n")
 
 -- Parent/child relationships
 
-each_proc(function(proc)
-	local proc_parent = proc_find(procs, "p", proc.R)
+for pid, proc in pairs(procs) do
+
+	local color = (proc.R == 1) and "grey70" or "white"
+	printf('	p%d [ label = "%s\\n%d %s" fillcolor=%q ];\n', proc.p, proc.n or proc.c, proc.p, proc.L, color)
+
+	local proc_parent = procs[proc.R]
 	if proc_parent then
-		local color = (proc_parent.p == 1) and "grey70" or "white"
-		printf('	p%d [ label = "%s\\n%d %s" fillcolor=%q ];\n', proc.p, proc.c, proc.p, proc.L, color)
 		if proc_parent.p ~= 1 then
 			printf('	p%d -- p%d [ penwidth=2 weight=100 color=grey60];\n', proc.R, proc.p)
 		end
 	end
-end)
-
--- FIFOs
-
-for _, type in ipairs( { "FIFO", "unix" } ) do
-	local seen = {}
-	each_file_filter("t", type, function(proc1, file1)
-		each_file_filter("t", type, function(proc2, file2)
-			if proc1 ~= proc2 and file1.i == file2.i then
-				local name = type .. " " .. file1.i
-				if not seen[name] then
-					printf('	p%d -- p%d [ label = "%s:%d" color="purple" ];\n', 
-						proc1.p, proc2.p, type, file1.i)
-					seen[name] = true
-				end
-			end
-		end)
-	end)
 end
 
+-- Connections
 
--- sockets
+for type, conn in pairs(conns) do
+	for id, files in pairs(conn) do
 
-for _, type in ipairs( { "IPv4", "IPv6" } ) do
-	local seen = {}
-	each_file_filter("t", type, function(proc1, file1)
-		each_file_filter("t", type, function(proc2, file2)
-			if proc1 ~= proc2 then
-				local n1, n2 = file1.n, file2.n
-				local from, to = n2:match("(.-)%->(.+)")
-				if from and to then
-					n2_rev = to .. "->" .. from
-					if n1 == n2_rev then
-						io.stderr:write(n1 .. "\n")
-						if not seen[n1] and not seen[n2] then
-							printf('	p%d -- p%d [ label = "%s" color="green" ];\n', 
-								proc1.p, proc2.p, file1.P .. " " .. file1.n)
-							seen[n1] = true
-							seen[n2] = true
-						end
-					end
-				end
+		-- one-on-one connections
+		
+		if #files == 2 then
+
+			local f1, f2 = files[1], files[2]
+			local p1, p2 = f1.proc, f2.proc
+			
+			if p1 ~= p2 then
+				local label = type .. ":" .. id
+				printf('	p%d -- p%d [ color="green" label="%s"];\n', p1.p, p2.p, label)
 			end
-		end)
-	end)
+
+		end
+	end
 end
 
 -- Done
 
-print("}")
+printf("}\n")
 
 -- vi: ft=lua ts=3 sw=3
 
