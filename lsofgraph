@@ -156,7 +156,7 @@ local conns = find_conns(procs)
 
 -- Generate graph
 
-printf("graph G {\n")
+printf("digraph G {\n")
 printf("	rankdir = LR;\n")
 printf("	node [ shape=box, style=\"rounded,filled\" width=0, height=0, fontname=Helvetica, fontsize=10];\n")
 printf("	edge [ fontname=Helvetica, fontsize=10];\n")
@@ -171,7 +171,7 @@ for pid, proc in pairs(procs) do
 	local proc_parent = procs[proc.R]
 	if proc_parent then
 		if proc_parent.p ~= 1 then
-			printf('	p%d -- p%d [ penwidth=2 weight=100 color=grey60];\n', proc.R, proc.p)
+			printf('	p%d -> p%d [ penwidth=2 weight=100 color=grey60 dir="none" ];\n', proc.R, proc.p)
 		end
 	end
 end
@@ -197,7 +197,13 @@ for type, conn in pairs(conns) do
 			
 			if p1 ~= p2 then
 				local label = type .. ":" .. id
-				printf('	p%d -- p%d [ color="%s" label="%s"];\n', p1.p, p2.p, colors[type] or "black", label)
+				local dir = "both"
+				if f1.a == "w" then 
+					dir = "forward"
+				elseif f1.a == "r" then
+					dir = "backward"
+				end
+				printf('	p%d -> p%d [ color="%s" label="%s" dir="%s"];\n', p1.p, p2.p, colors[type] or "black", label, dir)
 			end
 
 		end
