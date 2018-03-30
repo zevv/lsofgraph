@@ -1,5 +1,5 @@
 
-A small utility to convert Unix 'lsof' output to a graph showing FOFO and UNIX interprocess communication.
+A small utility to convert Unix 'lsof' output to a graph showing FIFO and UNIX interprocess communication.
 
 Generate graph:
 
