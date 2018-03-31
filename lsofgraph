@@ -68,9 +68,6 @@ local function parse_lsof()
 
 		local tag, val = l:sub(1, 1), l:sub(2)
 
-		local valn = tonumber(val)
-		val = valn or val
-
 		if tag == 'p' then
 			if not procs[val] then
 				proc = { files = {} }
@@ -122,8 +119,9 @@ local function find_conns(procs)
 
 			if file.t == "unix" then
 				local us = cs.unix
-				us[file.i] = us[file.i] or {}
-				table.insert(us[file.i], file)
+				local i = file.i or file.d
+				us[i] = us[i] or {}
+				table.insert(us[i], file)
 			end
 
 			if file.t == "FIFO" then
@@ -165,12 +163,12 @@ printf("	edge [ fontname=Helvetica, fontsize=10];\n")
 
 for pid, proc in pairs(procs) do
 
-	local color = (proc.R == 1) and "grey70" or "white"
+	local color = (proc.R == "1") and "grey70" or "white"
 	printf('	p%d [ label = "%s\\n%d %s" fillcolor=%q ];\n', proc.p, proc.n or proc.c, proc.p, proc.L, color)
 
 	local proc_parent = procs[proc.R]
 	if proc_parent then
-		if proc_parent.p ~= 1 then
+		if proc_parent.p ~= "1" then
 			printf('	p%d -> p%d [ penwidth=2 weight=100 color=grey60 dir="none" ];\n', proc.R, proc.p)
 		end
 	end
