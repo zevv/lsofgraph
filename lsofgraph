@@ -66,6 +66,11 @@ local function parse_lsof()
 
 	for l in io.lines() do
 
+		if l:find("^COMMAND") then
+			io.stderr:write("Unexpected input, did you run lsof with the `-F` flag?\n")
+			os.exit(1)
+		end
+
 		local tag, val = l:sub(1, 1), l:sub(2)
 
 		if tag == 'p' then
