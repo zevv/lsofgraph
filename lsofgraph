@@ -172,7 +172,7 @@ local conns = find_conns(procs)
 -- Generate graph
 
 printf("digraph G {\n")
-printf("	rankdir = LR;\n")
+printf("	graph [ center=true, margin=0.2, nodesep=0.1, ranksep=0.3, rankdir=LR];\n")
 printf("	node [ shape=box, style=\"rounded,filled\" width=0, height=0, fontname=Helvetica, fontsize=10];\n")
 printf("	edge [ fontname=Helvetica, fontsize=10];\n")
 
