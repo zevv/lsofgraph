@@ -117,6 +117,7 @@ local function find_conns(procs)
 		unix = {}, -- index by inode
 		tcp  = {}, -- index by sorted endpoints
 		udp  = {}, -- index by sorted endpoints
+		pipe = {}, -- index by sorted endpoints
 	}
 
 	for pid, proc in pairs(procs) do
@@ -135,11 +136,22 @@ local function find_conns(procs)
 				table.insert(fs[file.i], file)
 			end
 
+			if file.t == "PIPE" then -- BSD/MacOS
+				for n in file.n:gmatch("%->(.+)") do
+					local ps = { file.d, n }
+					table.sort(ps)
+					local id = table.concat(ps, "\\n")
+					local fs = cs.pipe
+					fs[id] = fs[id] or {}
+					table.insert(fs[id], file)
+				end
+			end
+
 			if file.t == "IPv4" or file.t == "IPv6" then
 				local a, b = file.n:match("(.-)%->(.+)")
 				local ps = { a, b }
 				table.sort(ps)
-				local id = table.concat(ps, "->")
+				local id = table.concat(ps, "\\n")
 				local fs = (file.P == "TCP") and cs.tcp or cs.udp
 				fs[id] = fs[id] or {}
 				table.insert(fs[id], file)
@@ -186,6 +198,7 @@ local colors = {
 	unix = "purple",
 	tcp  = "red",
 	udp  = "orange",
+	pipe = "orange",
 }
 
 for type, conn in pairs(conns) do
@@ -199,7 +212,7 @@ for type, conn in pairs(conns) do
 			local p1, p2 = f1.proc, f2.proc
 			
 			if p1 ~= p2 then
-				local label = type .. ":" .. id
+				local label = type .. ":\\n" .. id
 				local dir = "both"
 				if f1.a == "w" then 
 					dir = "forward"
