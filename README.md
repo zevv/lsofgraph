@@ -13,6 +13,9 @@ or add `unflatten` to the chain for a better layout:
 sudo lsof -n -F | ./lsofgraph | unflatten -l 1 -c 6 | dot -T jpg > /tmp/a.jpg
 ````
 
+In case you are not happy using Lua, there is also a Python port of this script available at
+https://github.com/akme/lsofgraph-python
+
 ![example output](/example.jpg)
 
 
